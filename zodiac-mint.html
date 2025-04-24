@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zodiac Mint - Mint Your Astrological Sign</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@thirdweb-dev/sdk@latest/dist/thirdweb-sdk.umd.js"></script>
+    <style>
+        /* Custom font - Inter */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Simple loading spinner */
+        .loader {
+            border: 4px solid #f3f3f3; /* Light grey */
+            border-top: 4px solid #3498db; /* Blue */
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: inline-block; /* Keep it inline */
+            margin-left: 10px; /* Add some space */
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Ensure buttons have good touch target size */
+        button {
+            padding: 0.75rem 1.5rem; /* p-3 px-6 */
+            border-radius: 0.5rem; /* rounded-lg */
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+         /* Responsive container */
+        .container {
+            max-width: 90%; /* Use percentage for fluidity */
+            margin-left: auto;
+            margin-right: auto;
+            padding: 1rem; /* Add padding */
+        }
+        @media (min-width: 640px) { /* sm breakpoint */
+            .container {
+                max-width: 600px; /* Max width on larger screens */
+            }
+        }
+    </style>
+     <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gradient-to-br from-indigo-900 to-purple-900 min-h-screen text-white flex items-center justify-center p-4">
+
+    <div class="container bg-white bg-opacity-10 backdrop-filter backdrop-blur-lg p-6 md:p-8 rounded-xl shadow-2xl w-full max-w-md">
+        <h1 class="text-3xl font-bold text-center mb-6 text-yellow-300">Zodiac Mint ✨</h1>
+
+        <div id="wallet-section" class="text-center mb-6">
+            <button id="connect-wallet-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg w-full">
+                Connect Wallet
+            </button>
+            <p id="wallet-address" class="mt-2 text-sm break-all hidden"></p>
+            <p id="wallet-error" class="mt-2 text-sm text-red-400 hidden"></p>
+        </div>
+
+        <div id="mint-section" class="hidden">
+            <p class="text-center mb-4">Enter your birth date to mint your Zodiac sign NFT!</p>
+            <div class="mb-4">
+                <label for="birthdate" class="block text-sm font-medium mb-1">Birth Date:</label>
+                <input type="date" id="birthdate" name="birthdate" required
+                       class="w-full px-3 py-2 rounded-lg bg-white bg-opacity-20 text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-yellow-400">
+            </div>
+
+            <button id="mint-nft-btn" class="bg-yellow-500 hover:bg-yellow-600 text-indigo-900 font-bold rounded-lg w-full flex items-center justify-center disabled:opacity-50" disabled>
+                Mint Zodiac NFT
+                <div id="mint-loader" class="loader hidden"></div>
+            </button>
+             <p id="mint-error" class="mt-2 text-sm text-red-400 text-center hidden"></p>
+        </div>
+
+        <div id="result-section" class="mt-6 text-center hidden">
+            <h2 class="text-xl font-semibold mb-3">Minting Successful! 🎉</h2>
+            <p id="result-message" class="mb-2"></p>
+            <p class="text-sm mb-1">Transaction Hash:</p>
+            <a id="tx-hash-link" href="#" target="_blank" rel="noopener noreferrer" class="text-sm text-yellow-300 hover:text-yellow-200 break-all underline"></a>
+             <div id="nft-display" class="mt-4 p-4 bg-white bg-opacity-20 rounded-lg">
+                <p class="font-semibold text-lg" id="nft-name"></p>
+                <p class="text-sm" id="nft-description"></p>
+                <img id="nft-image" src="" alt="NFT Image" class="mt-2 rounded-lg mx-auto hidden max-w-full h-auto" onerror="this.style.display='none'">
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Ensure DOM is fully loaded before running script
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // --- Configuration ---
+            // IMPORTANT: Replace with your actual Thirdweb client ID
+            const THIRDWEB_CLIENT_ID = "YOUR_CLIENT_ID"; // Get one from https://thirdweb.com/dashboard/settings/api-keys
+            // IMPORTANT: Replace with your NFT Collection contract address deployed on Avalanche Fuji Testnet
+            const NFT_COLLECTION_ADDRESS = "YOUR_NFT_COLLECTION_CONTRACT_ADDRESS"; // Deploy one using Thirdweb dashboard: https://thirdweb.com/explore/nft-collection
+            const CHAIN_NAME = "avalanche-fuji"; // Target Avalanche Fuji Testnet
+
+            // --- DOM Elements ---
+            const connectWalletBtn = document.getElementById('connect-wallet-btn');
+            const walletAddressP = document.getElementById('wallet-address');
+            const walletErrorP = document.getElementById('wallet-error');
+            const mintSectionDiv = document.getElementById('mint-section');
+            const birthdateInput = document.getElementById('birthdate');
+            const mintNftBtn = document.getElementById('mint-nft-btn');
+            const mintLoader = document.getElementById('mint-loader');
+            const mintErrorP = document.getElementById('mint-error');
+            const resultSectionDiv = document.getElementById('result-section');
+            const resultMessageP = document.getElementById('result-message');
+            const txHashLink = document.getElementById('tx-hash-link');
+            const nftDisplayDiv = document.getElementById('nft-display');
+            const nftNameP = document.getElementById('nft-name');
+            const nftDescriptionP = document.getElementById('nft-description');
+            const nftImage = document.getElementById('nft-image');
+
+
+            // --- State ---
+            let sdk;
+            let signer = null;
+            let userAddress = null;
+            let contract = null;
+
+            // --- Helper Functions ---
+
+            // Function to get Zodiac sign from date
+            function getZodiacSign(date) {
+                if (!date) return null;
+                const day = date.getDate();
+                const month = date.getMonth() + 1; // Month is 0-indexed
+
+                if ((month == 1 && day >= 20) || (month == 2 && day <= 18)) return "Aquarius";
+                if ((month == 2 && day >= 19) || (month == 3 && day <= 20)) return "Pisces";
+                if ((month == 3 && day >= 21) || (month == 4 && day <= 19)) return "Aries";
+                if ((month == 4 && day >= 20) || (month == 5 && day <= 20)) return "Taurus";
+                if ((month == 5 && day >= 21) || (month == 6 && day <= 20)) return "Gemini";
+                if ((month == 6 && day >= 21) || (month == 7 && day <= 22)) return "Cancer";
+                if ((month == 7 && day >= 23) || (month == 8 && day <= 22)) return "Leo";
+                if ((month == 8 && day >= 23) || (month == 9 && day <= 22)) return "Virgo";
+                if ((month == 9 && day >= 23) || (month == 10 && day <= 22)) return "Libra";
+                if ((month == 10 && day >= 23) || (month == 11 && day <= 21)) return "Scorpio";
+                if ((month == 11 && day >= 22) || (month == 12 && day <= 21)) return "Sagittarius";
+                if ((month == 12 && day >= 22) || (month == 1 && day <= 19)) return "Capricorn";
+                return null; // Should not happen with valid date
+            }
+
+            // Function to get a simple emoji representation for the sign
+            function getZodiacEmoji(sign) {
+                const emojis = {
+                    "Aquarius": "♒️", "Pisces": "♓️", "Aries": "♈️", "Taurus": "♉️",
+                    "Gemini": "♊️", "Cancer": "♋️", "Leo": "♌️", "Virgo": "♍️",
+                    "Libra": "♎️", "Scorpio": "♏️", "Sagittarius": "♐️", "Capricorn": "♑️"
+                };
+                return emojis[sign] || "❓";
+            }
+
+             // Function to create a simple SVG placeholder image URL
+            function createPlaceholderSvgUrl(sign, emoji) {
+                const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+                                <rect width="100%" height="100%" fill="#6366F1"/> <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="80" fill="#FCD34D">${emoji}</text> <text x="50%" y="80%" dominant-baseline="middle" text-anchor="middle" font-size="20" fill="#FFFFFF">${sign}</text> </svg>`;
+                return `data:image/svg+xml;base64,${btoa(svg)}`; // Use base64 encoding
+            }
+
+            // Function to display errors
+            function displayError(element, message) {
+                element.textContent = message;
+                element.classList.remove('hidden');
+                console.error(message); // Also log to console
+            }
+
+            // Function to hide errors
+            function hideError(element) {
+                 element.textContent = '';
+                 element.classList.add('hidden');
+            }
+
+            // --- Initialization ---
+            async function initializeSDK() {
+                // Check if ThirdwebSDK is loaded
+                 if (!window.ThirdwebSDK) {
+                    console.error("Thirdweb SDK not loaded!");
+                    displayError(walletErrorP, "SDK failed to load. Please refresh.");
+                    return;
+                }
+                 const { ThirdwebSDK } = window.ThirdwebSDK;
+
+                try {
+                    // Use clientId for SDK initialization (recommended)
+                    sdk = new ThirdwebSDK(CHAIN_NAME, {
+                         clientId: THIRDWEB_CLIENT_ID,
+                    });
+                    console.log("Thirdweb SDK Initialized on", CHAIN_NAME);
+
+                    // Try to auto-connect if wallet is already connected
+                    await connectWallet();
+
+                } catch (error) {
+                    console.error("SDK Initialization failed:", error);
+                    displayError(walletErrorP, `SDK Init Failed: ${error.message}`);
+                }
+            }
+
+
+            // --- Wallet Connection ---
+            async function connectWallet() {
+                if (!sdk) {
+                     displayError(walletErrorP, "SDK not initialized.");
+                     return;
+                }
+                hideError(walletErrorP); // Hide previous errors
+
+                try {
+                    // This method attempts to connect to an existing session or prompts the user.
+                    // Note: For vanilla JS, direct wallet connection prompting might require
+                    // integrating specific wallet connectors or relying on ThirdwebProvider context in React/Vue.
+                    // Here, we'll primarily check if a signer exists, assuming connection happens externally
+                    // or was previously established. A more robust solution might involve a dedicated connect modal.
+
+                    // A simple approach for vanilla JS: Check if a signer can be obtained.
+                    // This often works if the user previously connected via a wallet extension.
+                    signer = sdk.getSigner();
+
+                    if (signer) {
+                        userAddress = await signer.getAddress();
+                        console.log("Wallet connected:", userAddress);
+                        walletAddressP.textContent = `Connected: ${userAddress.substring(0, 6)}...${userAddress.substring(userAddress.length - 4)}`;
+                        walletAddressP.classList.remove('hidden');
+                        connectWalletBtn.textContent = 'Wallet Connected';
+                        connectWalletBtn.disabled = true; // Disable after connection
+                         mintSectionDiv.classList.remove('hidden'); // Show minting section
+                        mintNftBtn.disabled = !birthdateInput.value; // Enable mint if date is entered
+
+                        // Get contract instance only after successful connection
+                         await getContractInstance();
+
+                    } else {
+                        // If no signer is found, prompt the user (this might not work reliably across all environments without specific connectors)
+                        // A better approach is to instruct the user to connect via their browser extension.
+                        console.log("No signer found. Please connect your wallet via browser extension.");
+                        displayError(walletErrorP, "Please connect your wallet using your browser extension.");
+                        connectWalletBtn.textContent = 'Connect Wallet'; // Reset button text
+                        connectWalletBtn.disabled = false;
+                         mintSectionDiv.classList.add('hidden'); // Hide minting section
+                         resultSectionDiv.classList.add('hidden'); // Hide results
+                    }
+                } catch (error) {
+                    console.error("Wallet connection failed:", error);
+                    displayError(walletErrorP, `Connection Failed: ${error.message}`);
+                    connectWalletBtn.textContent = 'Connection Failed';
+                    connectWalletBtn.disabled = false;
+                    mintSectionDiv.classList.add('hidden');
+                    resultSectionDiv.classList.add('hidden');
+                }
+            }
+
+            // --- Contract Interaction ---
+             async function getContractInstance() {
+                 if (!sdk || !userAddress) {
+                     console.error("SDK not ready or wallet not connected for contract interaction.");
+                     displayError(mintErrorP, "Wallet not connected.");
+                     return;
+                 }
+                 if (!NFT_COLLECTION_ADDRESS || NFT_COLLECTION_ADDRESS === "YOUR_NFT_COLLECTION_CONTRACT_ADDRESS") {
+                     displayError(mintErrorP, "NFT Collection contract address is not configured.");
+                     return;
+                 }
+
+                 try {
+                     contract = await sdk.getContract(NFT_COLLECTION_ADDRESS, "nft-collection");
+                     console.log("NFT Collection Contract Instance:", contract);
+                     // Now that we have the contract, ensure the mint button state is correct
+                     mintNftBtn.disabled = !birthdateInput.value;
+
+                 } catch (error) {
+                      console.error("Failed to get contract instance:", error);
+                      displayError(mintErrorP, `Contract Error: ${error.message}. Make sure the address is correct and deployed on ${CHAIN_NAME}.`);
+                      mintNftBtn.disabled = true; // Disable minting if contract fails
+                 }
+             }
+
+            // --- NFT Minting ---
+            async function mintNFT() {
+                if (!contract || !userAddress || !signer) {
+                    displayError(mintErrorP, "Cannot mint: Wallet not connected or contract not ready.");
+                    return;
+                }
+                hideError(mintErrorP); // Hide previous errors
+                resultSectionDiv.classList.add('hidden'); // Hide previous results
+
+                const birthDateValue = birthdateInput.value;
+                if (!birthDateValue) {
+                    displayError(mintErrorP, "Please select your birth date.");
+                    return;
+                }
+
+                const birthDate = new Date(birthDateValue);
+                const sign = getZodiacSign(birthDate);
+                if (!sign) {
+                    displayError(mintErrorP, "Could not determine Zodiac sign from date.");
+                    return;
+                }
+
+                mintNftBtn.disabled = true;
+                mintLoader.classList.remove('hidden');
+                mintNftBtn.querySelector('span:not(.loader)').textContent = 'Minting...'; // Update button text if needed
+
+                try {
+                    const emoji = getZodiacEmoji(sign);
+                    const imageUrl = createPlaceholderSvgUrl(sign, emoji); // Generate placeholder SVG
+
+                    // Construct NFT Metadata
+                    const metadata = {
+                        name: `${sign} Sign (${emoji})`,
+                        description: `A unique NFT representing the ${sign} astrological sign, minted by ${userAddress.substring(0, 6)}...`,
+                        image: imageUrl, // Use the generated SVG URL
+                        attributes: [ // Example attributes
+                            { trait_type: "Zodiac Sign", value: sign },
+                            { trait_type: "Mint Date", value: new Date().toLocaleDateString() }
+                        ]
+                    };
+
+                    console.log("Minting NFT with metadata:", metadata);
+
+                    // Mint the NFT to the connected user's address
+                    // Ensure the connected wallet (`signer`) has minting permissions on the contract
+                    const tx = await contract.erc721.mintTo(userAddress, metadata);
+
+                    console.log("Minting transaction:", tx);
+                    const receipt = tx.receipt; // Transaction receipt
+                    const tokenId = tx.id; // ID of the minted NFT
+                    const mintedNft = await tx.data(); // Fetch the NFT data
+
+                    console.log("Mint successful!", receipt);
+                    console.log("Minted NFT ID:", tokenId.toString());
+                    console.log("Minted NFT Data:", mintedNft);
+
+                    // Display Success
+                    resultMessageP.textContent = `Successfully minted your ${sign} NFT!`;
+                    txHashLink.textContent = receipt.transactionHash;
+                    // IMPORTANT: Update this URL structure based on the Avalanche Fuji block explorer (Snowtrace)
+                    txHashLink.href = `https://testnet.snowtrace.io/tx/${receipt.transactionHash}`;
+                    resultSectionDiv.classList.remove('hidden');
+
+                     // Display NFT details
+                    nftNameP.textContent = mintedNft.metadata.name;
+                    nftDescriptionP.textContent = mintedNft.metadata.description;
+                    if (mintedNft.metadata.image) {
+                        nftImage.src = mintedNft.metadata.image;
+                        nftImage.alt = mintedNft.metadata.name;
+                        nftImage.classList.remove('hidden');
+                        // Add error handler for image loading
+                        nftImage.onerror = () => {
+                            console.warn("Failed to load NFT image.");
+                            nftImage.classList.add('hidden'); // Hide if image fails
+                        };
+                    } else {
+                         nftImage.classList.add('hidden');
+                    }
+                    nftDisplayDiv.classList.remove('hidden');
+
+
+                } catch (error) {
+                    console.error("Minting failed:", error);
+                    // Try to provide a more specific error message
+                    let errorMessage = `Minting Failed: ${error.message}`;
+                    if (error.message.includes("user rejected transaction")) {
+                        errorMessage = "Transaction rejected in wallet.";
+                    } else if (error.message.includes("insufficient funds")) {
+                        errorMessage = "Insufficient AVAX funds for gas fees.";
+                    } else if (error.message.includes("invalid contract address")) {
+                         errorMessage = "Invalid Contract Address. Check configuration.";
+                    }
+                    displayError(mintErrorP, errorMessage);
+                    resultSectionDiv.classList.add('hidden'); // Hide result section on error
+                } finally {
+                    // Reset button state regardless of success/failure
+                    mintNftBtn.disabled = false;
+                    mintLoader.classList.add('hidden');
+                    mintNftBtn.querySelector('span:not(.loader)').textContent = 'Mint Zodiac NFT'; // Reset button text
+                    // Re-enable based on date input only if connected
+                    if(userAddress) mintNftBtn.disabled = !birthdateInput.value;
+                }
+            }
+
+            // --- Event Listeners ---
+            connectWalletBtn.addEventListener('click', connectWallet);
+            mintNftBtn.addEventListener('click', mintNFT);
+            birthdateInput.addEventListener('change', () => {
+                 // Enable mint button only if connected and date is selected
+                mintNftBtn.disabled = !(userAddress && birthdateInput.value && contract);
+                hideError(mintErrorP); // Hide date error if user selects one
+                resultSectionDiv.classList.add('hidden'); // Hide previous results when date changes
+            });
+
+            // --- Initial Load ---
+            initializeSDK();
+        });
+    </script>
+
+</body>
+</html>
